@@ -1,0 +1,115 @@
+import 'package:flutter/material.dart';
+
+import '../../../data/repositories/ai_repository.dart';
+import '../../../data/models/ai_message_model.dart';
+
+class AIViewModel extends ChangeNotifier {
+  final AIRepository _aiRepository;
+
+  AIViewModel(this._aiRepository);
+
+  final List<AIMessageModel> _messages = [];
+  bool _isSending = false;
+  String? _errorMessage;
+
+  List<AIMessageModel> get messages => _messages;
+  bool get isSending => _isSending;
+  String? get errorMessage => _errorMessage;
+
+  // Load chat history
+  Future<void> loadChatHistory() async {
+    try {
+      // TODO: Load from repository
+      // For now, add welcome message
+      if (_messages.isEmpty) {
+        _messages.add(
+          AIMessageModel(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            userId: 'ai',
+            content: 'مرحباً! أنا مساعد Lumo AI الذكي. يمكنني مساعدتك في الإجابة عن أسئلتك المتعلقة بصحة الأطفال والرعاية الطبية. كيف يمكنني مساعدتك اليوم؟',
+            isUser: false,
+            timestamp: DateTime.now(),
+          ),
+        );
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  // Send message
+  Future<void> sendMessage(String userId, String content) async {
+    if (content.trim().isEmpty) return;
+
+    // Add user message
+    final userMessage = AIMessageModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      userId: userId,
+      content: content.trim(),
+      isUser: true,
+      timestamp: DateTime.now(),
+    );
+    _messages.add(userMessage);
+    notifyListeners();
+
+    // Add loading message
+    final loadingMessage = AIMessageModel(
+      id: '${DateTime.now().millisecondsSinceEpoch + 1}',
+      userId: 'ai',
+      content: '',
+      isUser: false,
+      timestamp: DateTime.now(),
+      isLoading: true,
+    );
+    _messages.add(loadingMessage);
+    _isSending = true;
+    notifyListeners();
+
+    try {
+      // Send to AI
+      final aiResponse = await _aiRepository.sendMessage(
+        userId: userId,
+        content: content,
+      );
+
+      // Remove loading message
+      _messages.removeLast();
+
+      // Add AI response
+      _messages.add(aiResponse);
+      _isSending = false;
+      notifyListeners();
+    } catch (e) {
+      // Remove loading message
+      _messages.removeLast();
+
+      // Add error message
+      final errorMessage = AIMessageModel(
+        id: '${DateTime.now().millisecondsSinceEpoch + 2}',
+        userId: 'ai',
+        content: '',
+        isUser: false,
+        timestamp: DateTime.now(),
+        error: 'عذراً، حدث خطأ في الاتصال. الرجاء المحاولة مرة أخرى.',
+      );
+      _messages.add(errorMessage);
+      _errorMessage = e.toString();
+      _isSending = false;
+      notifyListeners();
+    }
+  }
+
+  // Clear chat history
+  Future<void> clearChatHistory() async {
+    _messages.clear();
+    await loadChatHistory(); // Add welcome message again
+    notifyListeners();
+  }
+
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+}
